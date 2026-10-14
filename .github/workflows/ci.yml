@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast feedback: pure-Swift logic on Linux, same as running it locally.
+  petcore-linux:
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test PetCore
+        run: swift test --package-path PetCore
+
+  # Builds the iOS app for the Simulator (no signing needed) and captures
+  # screenshots + videos of each mood. Free on public repos.
+  ios-simulator:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Test PetCore on macOS
+        run: swift test --package-path PetCore
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build, run in Simulator, capture screenshots
+        run: scripts/ci-simulator-screenshots.sh
+
+      - name: Upload screenshots and videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: build/screenshots
+          if-no-files-found: warn
+
+      - name: Upload simulator app (for Appetize.io)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreenPet-simulator-app
+          path: build/ScreenPet-simulator.zip
